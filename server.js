@@ -27,6 +27,7 @@ const schema = makeExecutableSchema({
 
 const app = express();
 const graphqlEndpoint = '/graphql';
+const subscriptionsEndpoint = 'ws://localhost:5000/subscriptions';
 
 const addUser = async (req, res, next) => {
   const token = req.headers['x-token'];
@@ -64,7 +65,13 @@ app.use(
     },
   })),
 );
-app.use('/graphiql', graphiqlExpress({ endpointURL: graphqlEndpoint }));
+app.use(
+  '/graphiql',
+  graphiqlExpress({
+    endpointURL: graphqlEndpoint,
+    subscriptionsEndpoint,
+  }),
+);
 
 const server = createServer(app);
 const PORT = process.env.PORT || 5000;
@@ -77,6 +84,19 @@ models.sequelize.sync().then(() => {
         execute,
         subscribe,
         schema,
+        onConnect: async ({ token, refreshToken }, webSocket) => {
+          if (token && refreshToken) {
+            try {
+              const { user } = jwt.verify(token, SECRET);
+              return { models, user };
+            } catch (err) {
+              const newTokens = await refreshTokens(token, refreshToken, models, SECRET, SECRET2);
+              return { models, user: newTokens.user };
+            }
+          }
+
+          return { models };
+        },
       },
       {
         server,

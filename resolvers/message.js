@@ -1,8 +1,35 @@
+import { PubSub, withFilter } from 'graphql-subscriptions';
 import requiresAuth from '../helpers/permissions';
 
+const pubsub = new PubSub();
+const NEW_CHANNEL_MESSAGE = 'NEW_CHANNEL_MESSAGE';
+
 export default {
+  Subscription: {
+    newChannelMessage: {
+      subscribe: withFilter(
+        (parent, { channelId }, { models, user }) =>
+          // check if part of the team
+          // const channel = await models.Channel.findOne({ where: { id: channelId } });
+          // const member = await models.Member.findOne({
+          //   where: { teamId: channel.teamId, userId: user.id },
+          // });
+          // if (!member) {
+          //   throw new Error("You have to be a member of the team to subcribe to it's messages");
+          // }
+          pubsub.asyncIterator(NEW_CHANNEL_MESSAGE),
+        (payload, args) => payload.channelId === args.channelId,
+      ),
+    },
+  },
   Message: {
-    user: ({ userId }, args, { models }) => models.User.findOne({ where: { id: userId } }),
+    user: ({ user, userId }, args, { models }) => {
+      if (user) {
+        return user;
+      }
+
+      return models.User.findOne({ where: { id: userId } }, { raw: true });
+    },
   },
   Query: {
     messages: requiresAuth.createResolver(async (parent, { channelId }, { models }) =>
@@ -14,10 +41,29 @@ export default {
   Mutation: {
     createMessage: requiresAuth.createResolver(async (parent, args, { models, user }) => {
       try {
-        await models.Message.create({
+        const message = await models.Message.create({
           ...args,
           userId: user.id,
         });
+
+        const asyncFunc = async () => {
+          const currentUser = await models.User.findOne({
+            where: {
+              id: user.id,
+            },
+          });
+
+          pubsub.publish(NEW_CHANNEL_MESSAGE, {
+            channelId: args.channelId,
+            newChannelMessage: {
+              ...message.dataValues,
+              user: currentUser.dataValues,
+            },
+          });
+        };
+
+        asyncFunc();
+
         return true;
       } catch (err) {
         console.log(err);
