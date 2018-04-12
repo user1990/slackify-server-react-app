@@ -14,6 +14,11 @@ export default {
           raw: true,
         },
       )),
+    inviteTeams: requiresAuth.createResolver(async (parent, args, { models, user }) =>
+      models.sequelize.query('select * from teams join members on id = team_id where user_id = ?', {
+        replacements: [user.id],
+        model: models.Team,
+      })),
   },
   Mutation: {
     addTeamMember: requiresAuth.createResolver(async (parent, { email, teamId }, { models, user }) => {
