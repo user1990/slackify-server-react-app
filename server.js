@@ -1,11 +1,16 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
+import { createServer } from 'http';
 import { graphqlExpress, graphiqlExpress } from 'apollo-server-express';
 import { makeExecutableSchema } from 'graphql-tools';
 import path from 'path';
 import { fileLoader, mergeTypes, mergeResolvers } from 'merge-graphql-schemas';
 import jwt from 'jsonwebtoken';
+import { execute, subscribe } from 'graphql';
+import { PubSub } from 'graphql-subscriptions';
+import { SubscriptionServer } from 'subscriptions-transport-ws';
+
 import models from './models';
 import { refreshTokens } from './auth';
 
@@ -21,7 +26,6 @@ const schema = makeExecutableSchema({
 });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 const graphqlEndpoint = '/graphql';
 
 const addUser = async (req, res, next) => {
@@ -62,8 +66,24 @@ app.use(
 );
 app.use('/graphiql', graphiqlExpress({ endpointURL: graphqlEndpoint }));
 
+const server = createServer(app);
+const PORT = process.env.PORT || 5000;
+
 models.sequelize.sync().then(() => {
-  app.listen(PORT);
+  server.listen(PORT, () => {
+    // eslint-disable-next-line no-new
+    new SubscriptionServer(
+      {
+        execute,
+        subscribe,
+        schema,
+      },
+      {
+        server,
+        path: '/subscriptions',
+      },
+    );
+  });
 
   console.log('=================================');
   console.log(`Server is running on port ${PORT}`);
