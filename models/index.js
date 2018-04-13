@@ -16,6 +16,7 @@ const models = {
   Message: sequelize.import('./message.js'),
   Team: sequelize.import('./team.js'),
   Member: sequelize.import('./member.js'),
+  DirectMessage: sequelize.import('./directMessage.js'),
 };
 
 // Loop from all models & associate them together
